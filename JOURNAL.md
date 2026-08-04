@@ -21,3 +21,23 @@ Semantic search won whenever queries used paraphrased concepts, broad questions,
   * **Why Semantic won:** BM25 blindly matched the word `"custom"` to a quote about *"the custom of the Irish"* in Frankenstein. Semantic search ignored the literal word match and correctly retrieved the TensorFlow/tensor2tensor ML training models from the research paper (`Dist: 0.6835`).
 * **`"How does the model calculate attention between words?"`**
   * **Why Semantic won:** It retrieved conceptual explanations of masking and self-attention layers without requiring exact token overlap for the word `"calculate"`.
+
+# Week 6, Day 2: Hybrid Search via Reciprocal Rank Fusion (RRF)
+
+> **Core Takeaway:** Reciprocal Rank Fusion (RRF) solves the score scale incompatibility between BM25 and vector embeddings by ranking documents purely by position ($1 / (\text{rank} + k)$). Combining a $top\_k \times 3$ candidate pool from both search methods guarantees that exact matches and conceptual matches both float to the top.
+
+## 1. Hybrid Search Validation Results
+Running our 6 validation queries through `HybridSearchEngine` yielded a **100% success rate** across both technical and conceptual query types:
+
+* **Exact Technical/Parametric Queries:**
+  * `"Adam optimizer beta1 0.9"` $\rightarrow$ **Rank 1 (`BM25 + Semantic`)** [RRF: `0.01639`]
+  * `"BLEU scores English-to-German"` $\rightarrow$ **Rank 1 (`BM25 + Semantic`)** [RRF: `0.01639`]
+  * `"Modern Prometheus Wollstonecraft"` $\rightarrow$ **Rank 1 (`BM25 + Semantic`)** [RRF: `0.01639`]
+* **Broad Conceptual Queries:**
+  * `"How does the model calculate attention between words?"` $\rightarrow$ **Rank 1 (`BM25 + Semantic`)** [RRF: `0.01600`]
+  * `"Why did the creator feel guilty about his monster?"` $\rightarrow$ **Rank 1 (`BM25 + Semantic`)** [RRF: `0.01600`]
+  * `"What training hardware and GPUs were used?"` $\rightarrow$ **Rank 1 (`BM25 + Semantic`)** [RRF: `0.01626`]
+
+## 2. Key Observations
+1. **Agreement Boost:** When both BM25 and Semantic Search identify the same document in their candidate pools, the combined RRF score pushes it straight to Rank 1.
+2. **Fallback Safety:** If Semantic Search misses a rare proper noun (like `Wollstonecraft`), BM25 still captures it and retains it in the final results list without crashing or getting buried.
