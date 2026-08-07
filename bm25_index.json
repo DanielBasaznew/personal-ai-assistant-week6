@@ -4166,6 +4166,26 @@
         "file_type": "txt",
         "page": 1
       }
+    },
+    {
+      "id": "test_chunk_001",
+      "text": "RAG pipelines combine vector retrieval with large language models.",
+      "metadata": {
+        "document_name": "my_notes",
+        "document_type": "notes",
+        "tags": "rag,llm,ai",
+        "ingested_at": "2026-08-07T19:00:21.026988+00:00"
+      }
+    },
+    {
+      "id": "test_chunk_002",
+      "text": "Deep residual learning for image recognition uses shortcut connections.",
+      "metadata": {
+        "document_name": "resnet_paper",
+        "document_type": "paper",
+        "tags": "cv,deep_learning",
+        "ingested_at": "2026-08-07T19:01:58.468949+00:00"
+      }
     }
   ],
   "corpus_tokens": [
@@ -103498,6 +103518,28 @@
       "provided",
       "context",
       "chunks"
+    ],
+    [
+      "rag",
+      "pipelines",
+      "combine",
+      "vector",
+      "retrieval",
+      "with",
+      "large",
+      "language",
+      "models"
+    ],
+    [
+      "deep",
+      "residual",
+      "learning",
+      "for",
+      "image",
+      "recognition",
+      "uses",
+      "shortcut",
+      "connections"
     ]
   ]
 }

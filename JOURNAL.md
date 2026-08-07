@@ -41,3 +41,27 @@ Running our 6 validation queries through `HybridSearchEngine` yielded a **100% s
 ## 2. Key Observations
 1. **Agreement Boost:** When both BM25 and Semantic Search identify the same document in their candidate pools, the combined RRF score pushes it straight to Rank 1.
 2. **Fallback Safety:** If Semantic Search misses a rare proper noun (like `Wollstonecraft`), BM25 still captures it and retains it in the final results list without crashing or getting buried.
+
+# Week 6, Day 3: Metadata Filtering + Self-Querying Router
+
+> **Core Takeaway:** Hardcoding filter logic creates fragile search systems. Using an LLM (Gemini 2.5 Flash) to parse user intent into a structured `QueryIntent` object enables "Self-Querying" — automatically extracting source filters, document types, and cleaned query strings before passing them to hybrid retrieval.
+
+## 1. Query Router Evaluation
+We evaluated `parse_query_intent` across several distinct query patterns:
+
+* **Source-Specific Queries:** `"What does resnet_paper say about residual learning?"`
+  * **Parsed Intent:** `clean_query="residual learning"`, `source_filter="resnet_paper"`, `doc_type="paper"`
+  * **Retrieval Effect:** Applied pre-filtering in both BM25 and ChromaDB, narrowing search space directly to the target paper.
+* **Document-Type Queries:** `"In my notes, what did I write about RAG?"`
+  * **Parsed Intent:** `clean_query="what did I write about RAG"`, `source_filter="my_notes"`, `doc_type="notes"`
+  * **Retrieval Effect:** Restricted search strictly to notes chunks.
+* **Explicit Global Queries:** `"Search everything for Frankenstein"`
+  * **Parsed Intent:** `clean_query="Frankenstein"`, `source_filter=None`, `doc_type=None`
+  * **Retrieval Effect:** Overrode all source filters to perform full-breadth hybrid search across the whole database.
+* **Conversational Inputs:** `"Hello, how are you today?"`
+  * **Parsed Intent:** `requires_documents=False`
+  * **Retrieval Effect:** Bypasses document retrieval entirely to save compute.
+
+## 2. Key Insights
+1. **Clean Query Extraction:** Stripping operational phrasing (e.g., *"search in my notes for"*) improves keyword matching scores in BM25 because filler tokens aren't competing for document frequency weight.
+2. **Dual-Index Synchronization:** Writing rich metadata (`document_name`, `document_type`, `tags`, `ingested_at`) to both ChromaDB and BM25 simultaneously ensures filter clauses work identically across vector and keyword retrieval.
