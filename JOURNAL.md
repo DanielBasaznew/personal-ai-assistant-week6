@@ -22,6 +22,8 @@ Semantic search won whenever queries used paraphrased concepts, broad questions,
 * **`"How does the model calculate attention between words?"`**
   * **Why Semantic won:** It retrieved conceptual explanations of masking and self-attention layers without requiring exact token overlap for the word `"calculate"`.
 
+---
+
 # Week 6, Day 2: Hybrid Search via Reciprocal Rank Fusion (RRF)
 
 > **Core Takeaway:** Reciprocal Rank Fusion (RRF) solves the score scale incompatibility between BM25 and vector embeddings by ranking documents purely by position ($1 / (\text{rank} + k)$). Combining a $top\_k \times 3$ candidate pool from both search methods guarantees that exact matches and conceptual matches both float to the top.
@@ -42,41 +44,62 @@ Running our 6 validation queries through `HybridSearchEngine` yielded a **100% s
 1. **Agreement Boost:** When both BM25 and Semantic Search identify the same document in their candidate pools, the combined RRF score pushes it straight to Rank 1.
 2. **Fallback Safety:** If Semantic Search misses a rare proper noun (like `Wollstonecraft`), BM25 still captures it and retains it in the final results list without crashing or getting buried.
 
+---
+
 # Week 6, Day 3: Metadata Filtering + Self-Querying Router
 
-> **Core Takeaway:** Hardcoding filter logic creates fragile search systems. Using an LLM (Gemini 2.5 Flash) to parse user intent into a structured `QueryIntent` object enables "Self-Querying" — automatically extracting source filters, document types, and cleaned query strings before passing them to hybrid retrieval.
+> **Core Takeaway:** Hardcoding filter logic creates fragile search systems. By prompting Gemini 2.5 Flash with strict Pydantic JSON schema constraints, I implemented a "Self-Querying" intent router that dynamically extracts source filters, document types, and cleaned query strings before passing parameters to hybrid retrieval.
 
-## 1. Query Router Evaluation
-We evaluated `parse_query_intent` across several distinct query patterns:
+## 1. Query Router Model Evaluation
+I evaluated the LLM intent router across several distinct query patterns to verify extraction accuracy:
 
 * **Source-Specific Queries:** `"What does resnet_paper say about residual learning?"`
   * **Parsed Intent:** `clean_query="residual learning"`, `source_filter="resnet_paper"`, `doc_type="paper"`
-  * **Retrieval Effect:** Applied pre-filtering in both BM25 and ChromaDB, narrowing search space directly to the target paper.
+  * **Retrieval Effect:** Pre-filtered both BM25 and ChromaDB indexes, restricting search space directly to target embeddings.
 * **Document-Type Queries:** `"In my notes, what did I write about RAG?"`
   * **Parsed Intent:** `clean_query="what did I write about RAG"`, `source_filter="my_notes"`, `doc_type="notes"`
-  * **Retrieval Effect:** Restricted search strictly to notes chunks.
+  * **Retrieval Effect:** Restricted vector and keyword search space strictly to note chunks.
 * **Explicit Global Queries:** `"Search everything for Frankenstein"`
   * **Parsed Intent:** `clean_query="Frankenstein"`, `source_filter=None`, `doc_type=None`
-  * **Retrieval Effect:** Overrode all source filters to perform full-breadth hybrid search across the whole database.
+  * **Retrieval Effect:** Overrode source filters to perform full-breadth hybrid search across the entire database.
 * **Conversational Inputs:** `"Hello, how are you today?"`
   * **Parsed Intent:** `requires_documents=False`
-  * **Retrieval Effect:** Bypasses document retrieval entirely to save compute.
+  * **Retrieval Effect:** Bypassed vector and keyword retrieval entirely to eliminate unnecessary inference calls.
 
 ## 2. Key Insights
 1. **Clean Query Extraction:** Stripping operational phrasing (e.g., *"search in my notes for"*) improves keyword matching scores in BM25 because filler tokens aren't competing for document frequency weight.
 2. **Dual-Index Synchronization:** Writing rich metadata (`document_name`, `document_type`, `tags`, `ingested_at`) to both ChromaDB and BM25 simultaneously ensures filter clauses work identically across vector and keyword retrieval.
 
+---
+
 # Week 6, Day 4: Persistent Semantic & Episodic Memory Layer
 
-> **Core Takeaway:** To give an AI assistant long-term memory, we distinguish between Episodic Memory (raw timestamped conversation logs) and Semantic Memory (distilled facts). A simple SQLite database with `UPSERT` handles basic updates, but LLM extraction requires careful tuning to prevent storing temporary states or third-party facts.
+> **Core Takeaway:** To give an AI assistant long-term memory, we distinguish between Episodic Memory (raw timestamped conversation logs) and Semantic Memory (distilled facts). I built an LLM-driven extraction pipeline using Gemini 2.5 Flash and SQLite `UPSERT` logic to manage long-term state across sessions.
 
-## 1. Memory Extractor Edge-Case Analysis
-Running 10 stress-test queries through our Gemini 2.5 Flash extractor revealed distinct strengths and weaknesses in our naive extraction prompt:
+## 1. Memory Extractor Prompt Engineering & Edge-Case Evaluation
+I designed a system prompt and Pydantic output schema to evaluate how reliably Gemini 2.5 Flash extracts personal state updates across 10 stress-test queries:
 
-* **Successes:** The extractor perfectly isolated multiple facts in a single sentence (location + allergies), accurately captured negative preferences ("dislikes horror movies"), and successfully ignored conversational noise + technical queries.
-* **Failure - Temporary States:** The model eagerly stored "exhausted due to lack of sleep." Semantic memory should only store persistent facts; temporary states pollute long-term context.
-* **Failure - Third-Party Bleed:** Despite instructions to only store facts about the user, it stored a fact about the user's brother (`brother_occupation`). 
-* **Failure - Key Inconsistency:** During an update test, the LLM initially saved the user's city under `key='location'`, but later tried to update it using `key='current_city'`. In a pure SQLite key-value store, this fails to trigger the `ON CONFLICT DO UPDATE` clause, resulting in duplicate, conflicting records. 
+* **Successes:** The model isolated multiple distinct entities in a single sentence (location + allergies), captured negative preferences ("dislikes horror movies"), and successfully ignored conversational noise and general technical prompts.
+* **Failure - Temporary States:** The model over-extracted temporary user conditions (e.g., storing "exhausted due to lack of sleep"). I identified that semantic extraction prompts require explicit temporal guidelines to prevent temporary states from polluting long-term memory.
+* **Failure - Third-Party Bleed:** Despite instructions restricting extraction to user facts, the model extracted third-party data (`brother_occupation`).
+* **Failure - Key Inconsistency:** During an update test, the LLM saved the user's location under `key='location'`, but later attempted an update using `key='current_city'`. In exact-key key-value stores, this fails to trigger SQLite's `ON CONFLICT DO UPDATE` clause, resulting in duplicate records.
 
 ## 2. Production System Gap (Mem0)
-Compared to our exact-key lookup system, production memory agents like Mem0 solve the "Key Inconsistency" problem by storing facts as vector embeddings. Instead of relying on the LLM to guess the exact string key (`location` vs `current_city`), they use semantic similarity to find related past facts, and then use a secondary LLM pass to consolidate contradictory timelines.
+Compared to exact-key lookups, production memory frameworks like Mem0 solve the "Key Inconsistency" problem by storing facts as vector embeddings. Instead of relying on the LLM to guess exact string keys (`location` vs `current_city`), they use semantic vector search to identify related prior facts, followed by an LLM consolidation pass to handle updates.
+
+---
+
+# Week 6, Day 5: Personal AI Assistant - Full Integration & Stress Testing
+
+> **Core Takeaway:** I unified an LLM Query Router, Hybrid RRF Search, and an Automatic Memory Extraction Engine into a single, production-style personal assistant. The architecture dynamically conditions LLM generation on retrieved document chunks and persistent user facts.
+
+## 1. Multi-Model Pipeline & System Integration
+I conducted an end-to-end evaluation to verify real-time interactions across all AI modules:
+* **UI vs. LLM Command Routing:** Diagnosed an edge case where terminal parsing (`if input.startswith("forget ")`) intercepted user messages before reaching the LLM memory extractor. I resolved this by isolating CLI admin commands (`/forget <key>`) from natural language statements, allowing the Gemini memory extraction engine to handle natural conversation seamlessly.
+* **In-Context Prompt Modulation:** Verified that extracted semantic memory directly modulates LLM output. When asking the model to explain residual learning from the ResNet paper, the system retrieved paper chunks via Hybrid Search AND applied a stored user preference (`clear, step-by-step explanations`) to structure the response.
+* **Dynamic Intent Routing:** Confirmed that the self-query router reliably switches between targeted paper lookups, global database searches, and standard conversational inference without hallucinating filter constraints.
+
+## 2. Production Scaling Gap (Mem0 & Copilot)
+While our assistant effectively implements the core architecture of systems like Microsoft Copilot and Rewind AI (semantic extraction -> persistent storage -> prompt injection), enterprise implementations scale using two key techniques:
+1. **Vector-Based Fact Retrieval:** Instead of injecting all stored facts into every system prompt, production systems embed facts and perform vector similarity search to inject only the top $k$ relevant facts per conversation turn.
+2. **LLM-Driven Conflict Resolution:** Replacing exact-key `UPSERT` operations with secondary LLM consolidation passes to maintain historical timelines (e.g., tracking movement from city A to city B over time).
