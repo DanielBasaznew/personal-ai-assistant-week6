@@ -65,3 +65,18 @@ We evaluated `parse_query_intent` across several distinct query patterns:
 ## 2. Key Insights
 1. **Clean Query Extraction:** Stripping operational phrasing (e.g., *"search in my notes for"*) improves keyword matching scores in BM25 because filler tokens aren't competing for document frequency weight.
 2. **Dual-Index Synchronization:** Writing rich metadata (`document_name`, `document_type`, `tags`, `ingested_at`) to both ChromaDB and BM25 simultaneously ensures filter clauses work identically across vector and keyword retrieval.
+
+# Week 6, Day 4: Persistent Semantic & Episodic Memory Layer
+
+> **Core Takeaway:** To give an AI assistant long-term memory, we distinguish between Episodic Memory (raw timestamped conversation logs) and Semantic Memory (distilled facts). A simple SQLite database with `UPSERT` handles basic updates, but LLM extraction requires careful tuning to prevent storing temporary states or third-party facts.
+
+## 1. Memory Extractor Edge-Case Analysis
+Running 10 stress-test queries through our Gemini 2.5 Flash extractor revealed distinct strengths and weaknesses in our naive extraction prompt:
+
+* **Successes:** The extractor perfectly isolated multiple facts in a single sentence (location + allergies), accurately captured negative preferences ("dislikes horror movies"), and successfully ignored conversational noise + technical queries.
+* **Failure - Temporary States:** The model eagerly stored "exhausted due to lack of sleep." Semantic memory should only store persistent facts; temporary states pollute long-term context.
+* **Failure - Third-Party Bleed:** Despite instructions to only store facts about the user, it stored a fact about the user's brother (`brother_occupation`). 
+* **Failure - Key Inconsistency:** During an update test, the LLM initially saved the user's city under `key='location'`, but later tried to update it using `key='current_city'`. In a pure SQLite key-value store, this fails to trigger the `ON CONFLICT DO UPDATE` clause, resulting in duplicate, conflicting records. 
+
+## 2. Production System Gap (Mem0)
+Compared to our exact-key lookup system, production memory agents like Mem0 solve the "Key Inconsistency" problem by storing facts as vector embeddings. Instead of relying on the LLM to guess the exact string key (`location` vs `current_city`), they use semantic similarity to find related past facts, and then use a secondary LLM pass to consolidate contradictory timelines.
