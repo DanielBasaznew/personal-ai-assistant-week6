@@ -48,7 +48,7 @@ Running our 6 validation queries through `HybridSearchEngine` yielded a **100% s
 
 # Week 6, Day 3: Metadata Filtering + Self-Querying Router
 
-> **Core Takeaway:** Hardcoding filter logic creates fragile search systems. By prompting Gemini 2.5 Flash with strict Pydantic JSON schema constraints, I implemented a "Self-Querying" intent router that dynamically extracts source filters, document types, and cleaned query strings before passing parameters to hybrid retrieval.
+> **Core Takeaway:** Hardcoding filter logic creates fragile search systems. By prompting Gemini 3.1 Flash-Lite with strict Pydantic JSON schema constraints, I implemented a "Self-Querying" intent router that dynamically extracts source filters, document types, and cleaned query strings before passing parameters to hybrid retrieval.
 
 ## 1. Query Router Model Evaluation
 I evaluated the LLM intent router across several distinct query patterns to verify extraction accuracy:
@@ -74,10 +74,10 @@ I evaluated the LLM intent router across several distinct query patterns to veri
 
 # Week 6, Day 4: Persistent Semantic & Episodic Memory Layer
 
-> **Core Takeaway:** To give an AI assistant long-term memory, we distinguish between Episodic Memory (raw timestamped conversation logs) and Semantic Memory (distilled facts). I built an LLM-driven extraction pipeline using Gemini 2.5 Flash and SQLite `UPSERT` logic to manage long-term state across sessions.
+> **Core Takeaway:** To give an AI assistant long-term memory, we distinguish between Episodic Memory (raw timestamped conversation logs) and Semantic Memory (distilled facts). I built an LLM-driven extraction pipeline using Gemini 3.1 Flash-lite and SQLite `UPSERT` logic to manage long-term state across sessions.
 
 ## 1. Memory Extractor Prompt Engineering & Edge-Case Evaluation
-I designed a system prompt and Pydantic output schema to evaluate how reliably Gemini 2.5 Flash extracts personal state updates across 10 stress-test queries:
+I designed a system prompt and Pydantic output schema to evaluate how reliably Gemini 3.1 Flash-lite extracts personal state updates across 10 stress-test queries:
 
 * **Successes:** The model isolated multiple distinct entities in a single sentence (location + allergies), captured negative preferences ("dislikes horror movies"), and successfully ignored conversational noise and general technical prompts.
 * **Failure - Temporary States:** The model over-extracted temporary user conditions (e.g., storing "exhausted due to lack of sleep"). I identified that semantic extraction prompts require explicit temporal guidelines to prevent temporary states from polluting long-term memory.
